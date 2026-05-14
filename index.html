@@ -178,6 +178,124 @@
         .hidden {
             display: none !important;
         }
+
+        /* Help */
+        .help-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #666;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .help-btn:hover {
+            border-color: #555;
+            color: #fff;
+        }
+
+        .help-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            z-index: 20;
+        }
+
+        .help-panel {
+            background: #0a0a0a;
+            border: 1px solid #222;
+            border-radius: 4px;
+            max-width: 560px;
+            width: 100%;
+            max-height: 85vh;
+            overflow-y: auto;
+            padding: 32px;
+            position: relative;
+        }
+
+        .help-panel h2 {
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: 4px;
+        }
+
+        .help-tagline {
+            font-size: 12px;
+            color: #555;
+            margin-bottom: 24px;
+        }
+
+        .help-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            color: #555;
+            font-size: 18px;
+            line-height: 1;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .help-close:hover {
+            color: #fff;
+        }
+
+        .help-privacy {
+            border: 1px solid #2a2a2a;
+            border-radius: 4px;
+            padding: 14px 16px;
+            margin-bottom: 24px;
+            font-size: 12px;
+            color: #aaa;
+            line-height: 1.6;
+        }
+
+        .help-privacy strong {
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .help-section {
+            margin-bottom: 18px;
+        }
+
+        .help-section .term {
+            font-size: 12px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+
+        .help-section .desc {
+            font-size: 12px;
+            color: #888;
+            line-height: 1.6;
+        }
+
+        .help-footer {
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid #1a1a1a;
+            font-size: 11px;
+            color: #444;
+        }
     </style>
 </head>
 <body>
@@ -230,6 +348,69 @@
         <div class="canvas-container">
             <canvas id="spectrogram"></canvas>
             <div class="empty-state" id="emptyState">Drop an audio file to analyze</div>
+        </div>
+    </div>
+
+    <button class="help-btn" id="helpBtn" aria-label="About Spectre">?</button>
+
+    <div class="help-overlay hidden" id="helpOverlay">
+        <div class="help-panel">
+            <button class="help-close" id="helpClose" aria-label="Close">&times;</button>
+            <h2>SPECTRE</h2>
+            <div class="help-tagline">Audio quality analysis that runs entirely in your browser.</div>
+
+            <div class="help-privacy">
+                <strong>Privacy first.</strong> Your file never leaves this page. Decoding,
+                analysis, and rendering all happen locally in your browser — nothing is
+                uploaded or stored. The server only delivers the page itself.
+            </div>
+
+            <div class="help-section">
+                <div class="term">Spectrogram</div>
+                <div class="desc">The main view — frequency (vertical) over time (horizontal),
+                brightness showing energy. Lossy encoding leaves a sharp horizontal edge where
+                high frequencies were discarded; true lossless fills the spectrum to the top.</div>
+            </div>
+
+            <div class="help-section">
+                <div class="term">Quality cutoff</div>
+                <div class="desc">Spectre runs an FFT across 20 segments of the track and finds
+                where the spectrum consistently drops off. A ceiling well below 20&nbsp;kHz means
+                the audio was encoded at a lower bitrate than its container claims — shown in
+                File Info as an approximate kHz value.</div>
+            </div>
+
+            <div class="help-section">
+                <div class="term">Peak envelope</div>
+                <div class="desc">The dashed line traces the highest frequency carrying real
+                energy at each moment. A flat horizontal ceiling is the signature of lossy
+                encoding. Toggle it from the sidebar.</div>
+            </div>
+
+            <div class="help-section">
+                <div class="term">Quality cutoffs</div>
+                <div class="desc">Overlays reference lines for the 128 / 192 / 256 / 320&nbsp;kbps
+                frequency ceilings, so you can eyeball where your file lands.</div>
+            </div>
+
+            <div class="help-section">
+                <div class="term">Analysis badge</div>
+                <div class="desc">The verdict. For lossless containers (FLAC, WAV, ALAC) it
+                confirms genuine full-spectrum audio or flags a <em>fake lossless</em> transcode.
+                For MP3 it estimates the true bitrate tier. Opus and Ogg are judged by bitrate,
+                since they preserve high frequencies even when compressed.</div>
+            </div>
+
+            <div class="help-section">
+                <div class="term">File info</div>
+                <div class="desc">Duration, sample rate, channel count, and size — read straight
+                from the decoded audio. Playback sample rate is shown when it differs from the
+                file's.</div>
+            </div>
+
+            <div class="help-footer">
+                Drop an audio file to begin. Nothing is sent anywhere.
+            </div>
         </div>
     </div>
 
@@ -944,6 +1125,20 @@
                 animationId = null;
             }
         }
+
+        // Help overlay
+        const helpBtn = document.getElementById('helpBtn');
+        const helpOverlay = document.getElementById('helpOverlay');
+        const helpClose = document.getElementById('helpClose');
+
+        helpBtn.addEventListener('click', () => helpOverlay.classList.remove('hidden'));
+        helpClose.addEventListener('click', () => helpOverlay.classList.add('hidden'));
+        helpOverlay.addEventListener('click', (e) => {
+            if (e.target === helpOverlay) helpOverlay.classList.add('hidden');
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') helpOverlay.classList.add('hidden');
+        });
     </script>
 </body>
 </html>
