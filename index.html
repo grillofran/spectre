@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spectre</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #000;
+            color: #fff;
+            display: flex;
+        }
+
+        .sidebar {
+            width: 260px;
+            min-width: 260px;
+            height: 100vh;
+            background: #0a0a0a;
+            border-right: 1px solid #222;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow-y: auto;
+        }
+
+        .sidebar h1 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+            letter-spacing: 4px;
+        }
+
+        .upload-zone {
+            border: 1px dashed #333;
+            border-radius: 4px;
+            padding: 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .upload-zone:hover {
+            border-color: #555;
+            color: #888;
+        }
+
+        .upload-zone.dragging {
+            border-color: #fff;
+            background: #111;
+            color: #fff;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .player-section audio {
+            width: 100%;
+            height: 32px;
+            filter: invert(1) hue-rotate(180deg);
+        }
+
+        .section-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #444;
+            margin-bottom: 6px;
+        }
+
+        .quality-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 3px;
+            font-weight: 600;
+            font-size: 14px;
+            background: #222;
+        }
+
+        .quality-lossless { background: #fff; color: #000; }
+        .quality-high { background: #888; color: #000; }
+        .quality-medium { background: #444; color: #fff; }
+        .quality-low { background: #222; color: #666; }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 4px 12px;
+            font-size: 12px;
+        }
+
+        .info-grid .label {
+            color: #555;
+        }
+
+        .info-grid .value {
+            color: #aaa;
+        }
+
+        .settings-section {
+            margin-top: auto;
+            padding-top: 16px;
+            border-top: 1px solid #1a1a1a;
+        }
+
+        .toggle-btn {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #888;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.2s;
+        }
+
+        .toggle-btn:hover {
+            border-color: #555;
+            color: #aaa;
+        }
+
+        .toggle-btn.active {
+            background: #222;
+            border-color: #555;
+            color: #fff;
+        }
+
+        .main {
+            flex: 1;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .canvas-container {
+            width: 100%;
+            height: 100%;
+            background: #000;
+            border-radius: 4px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .empty-state {
+            color: #333;
+            font-size: 14px;
+            text-align: center;
+            position: absolute;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h1>SPECTRE</h1>
+
+        <div class="upload-zone" id="uploadZone">
+            Drop audio file or click
+        </div>
+        <input type="file" id="fileInput" accept="audio/*">
+
+        <div class="player-section hidden" id="playerSection">
+            <audio id="audioPlayer" controls></audio>
+        </div>
+
+        <div id="analysisSection" class="hidden">
+            <div class="section-label">Analysis</div>
+            <div id="qualityBadge" class="quality-badge">—</div>
+            <div class="info-grid" style="margin-top: 12px;">
+                <span class="label">Format</span>
+                <span class="value" id="infoFormat">—</span>
+                <span class="label">Observed</span>
+                <span class="value" id="infoObserved">—</span>
+                <span class="label">Cutoff</span>
+                <span class="value" id="infoCutoff">—</span>
+            </div>
+        </div>
+
+        <div id="fileSection" class="hidden">
+            <div class="section-label">File Info</div>
+            <div class="info-grid">
+                <span class="label">Duration</span>
+                <span class="value" id="infoDuration">—</span>
+                <span class="label">Sample Rate</span>
+                <span class="value" id="infoSampleRate">—</span>
+                <span class="label">Channels</span>
+                <span class="value" id="infoChannels">—</span>
+                <span class="label">Size</span>
+                <span class="value" id="infoSize">—</span>
+            </div>
+        </div>
+
+        <div class="settings-section" style="display: flex; flex-direction: column; gap: 8px;">
+            <button class="toggle-btn" id="showCutoffsBtn">Quality cutoffs</button>
+            <button class="toggle-btn active" id="showEnvelopeBtn">Peak envelope</button>
+        </div>
+    </div>
+
+    <div class="main">
+        <div class="canvas-container">
+            <canvas id="spectrogram"></canvas>
+            <div class="empty-state" id="emptyState">Drop an audio file to analyze</div>
+        </div>
+    </div>
+
+    <script>
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const playerSection = document.getElementById('playerSection');
+        const analysisSection = document.getElementById('analysisSection');
+        const fileSection = document.getElementById('fileSection');
+        const canvas = document.getElementById('spectrogram');
+        const ctx = canvas.getContext('2d');
+        const qualityBadge = document.getElementById('qualityBadge');
+        const emptyState = document.getElementById('emptyState');
+        const showCutoffsBtn = document.getElementById('showCutoffsBtn');
+        const showEnvelopeBtn = document.getElementById('showEnvelopeBtn');
+
+        let audioPlayer = document.getElementById('audioPlayer');
+        let audioContext = null;
+        let analyser = null;
+        let source = null;
+        let animationId = null;
+        let spectrogramData = [];
+        let maxDataPoints = 250; // Fewer points = wider peaks (more zoomed in)
+        let decodedBuffer = null;
+        let fileMetadata = null;
+        let currentObjectURL = null;
+        let showQualityCutoffs = false;
+        let showPeakEnvelope = true;
+
+        // Toggle quality cutoffs
+        showCutoffsBtn.addEventListener('click', () => {
+            showQualityCutoffs = !showQualityCutoffs;
+            showCutoffsBtn.classList.toggle('active', showQualityCutoffs);
+            if (!animationId && audioContext) {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                redrawSpectrogram();
+                drawFrequencyScale();
+            }
+        });
+
+        // Toggle peak envelope
+        showEnvelopeBtn.addEventListener('click', () => {
+            showPeakEnvelope = !showPeakEnvelope;
+            showEnvelopeBtn.classList.toggle('active', showPeakEnvelope);
+            if (!animationId && audioContext) {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                redrawSpectrogram();
+                drawFrequencyScale();
+            }
+        });
+
+        // Upload handling
+        uploadZone.addEventListener('click', () => fileInput.click());
+
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragging');
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragging');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragging');
+            const file = e.dataTransfer.files[0];
+            if (file) loadAudioFile(file);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) loadAudioFile(file);
+        });
+
+        async function parseFileMetadata(file) {
+            const meta = {
+                fileName: file.name,
+                fileSize: file.size,
+                extension: file.name.split('.').pop().toLowerCase(),
+                format: null,
+                bitrate: null,
+                isLosslessContainer: false
+            };
+
+            const losslessExtensions = ['flac', 'wav', 'aiff', 'aif', 'alac'];
+            const lossyExtensions = ['mp3', 'aac', 'ogg', 'opus', 'wma'];
+
+            if (losslessExtensions.includes(meta.extension)) {
+                meta.isLosslessContainer = true;
+                meta.format = meta.extension.toUpperCase();
+            } else if (lossyExtensions.includes(meta.extension)) {
+                meta.format = meta.extension.toUpperCase();
+            } else if (meta.extension === 'm4a') {
+                meta.format = 'M4A';
+            }
+
+            if (meta.extension === 'mp3') {
+                try {
+                    const buffer = await file.slice(0, 10000).arrayBuffer();
+                    const view = new DataView(buffer);
+                    meta.bitrate = parseMp3Bitrate(view);
+                } catch (e) {}
+            }
+
+            return meta;
+        }
+
+        function parseMp3Bitrate(view) {
+            const bitrates = [
+                [0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448],
+                [0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384],
+                [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320],
+            ];
+
+            for (let i = 0; i < view.byteLength - 4; i++) {
+                if (view.getUint8(i) === 0xFF) {
+                    const b = view.getUint8(i + 1);
+                    if ((b & 0xE0) === 0xE0) {
+                        const version = (b >> 3) & 0x03;
+                        const layer = (b >> 1) & 0x03;
+                        const bitrateIndex = (view.getUint8(i + 2) >> 4) & 0x0F;
+                        if (version === 3 && layer === 1 && bitrateIndex > 0 && bitrateIndex < 15) {
+                            return bitrates[2][bitrateIndex];
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        async function loadAudioFile(file) {
+            // Stop and cleanup
+            if (audioPlayer) {
+                audioPlayer.pause();
+                audioPlayer.removeEventListener('play', onAudioPlay);
+                audioPlayer.removeEventListener('pause', stopVisualization);
+                audioPlayer.removeEventListener('ended', stopVisualization);
+            }
+            stopVisualization();
+            spectrogramData = [];
+
+            if (currentObjectURL) {
+                URL.revokeObjectURL(currentObjectURL);
+                currentObjectURL = null;
+            }
+
+            if (source) {
+                try { source.disconnect(); } catch(e) {}
+                source = null;
+            }
+
+            if (analyser) {
+                try { analyser.disconnect(); } catch(e) {}
+                analyser = null;
+            }
+
+            if (audioContext) {
+                try { await audioContext.close(); } catch(e) {}
+                audioContext = null;
+            }
+
+            // Create fresh audio element (required - can only attach source node once)
+            const newAudio = document.createElement('audio');
+            newAudio.controls = true;
+            playerSection.innerHTML = '';
+            playerSection.appendChild(newAudio);
+            audioPlayer = newAudio;
+
+            // Attach event listeners to new element
+            audioPlayer.addEventListener('play', onAudioPlay);
+            audioPlayer.addEventListener('pause', stopVisualization);
+            audioPlayer.addEventListener('ended', stopVisualization);
+
+            // Show sections
+            playerSection.classList.remove('hidden');
+            analysisSection.classList.remove('hidden');
+            fileSection.classList.remove('hidden');
+            emptyState.classList.add('hidden');
+
+            qualityBadge.textContent = 'Analyzing...';
+            qualityBadge.className = 'quality-badge';
+
+            try {
+                fileMetadata = await parseFileMetadata(file);
+
+                const arrayBuffer = await file.arrayBuffer();
+
+                // Decode in a temporary context
+                const tempContext = new (window.AudioContext || window.webkitAudioContext)();
+                decodedBuffer = await tempContext.decodeAudioData(arrayBuffer.slice(0));
+                const fileSampleRate = decodedBuffer.sampleRate;
+                await tempContext.close();
+
+                // Create new audio context for playback
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: fileSampleRate
+                });
+
+                // Set up audio player
+                currentObjectURL = URL.createObjectURL(file);
+                audioPlayer.src = currentObjectURL;
+
+                // Wait for audio to be loadable
+                await new Promise((resolve, reject) => {
+                    const onCanPlay = () => {
+                        audioPlayer.removeEventListener('canplay', onCanPlay);
+                        audioPlayer.removeEventListener('error', onError);
+                        resolve();
+                    };
+                    const onError = () => {
+                        audioPlayer.removeEventListener('canplay', onCanPlay);
+                        audioPlayer.removeEventListener('error', onError);
+                        reject(new Error('Audio load failed'));
+                    };
+                    audioPlayer.addEventListener('canplay', onCanPlay);
+                    audioPlayer.addEventListener('error', onError);
+                });
+
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 8192;
+                analyser.smoothingTimeConstant = 0.5; // Slightly higher to fatten thin peaks
+                analyser.minDecibels = -110; // Capture quieter signals
+                analyser.maxDecibels = -20;
+
+                source = audioContext.createMediaElementSource(audioPlayer);
+                source.connect(analyser);
+                analyser.connect(audioContext.destination);
+
+                resizeCanvas();
+
+                const cutoffFreq = analyzeBufferOffline(decodedBuffer);
+                displayQualityResults(cutoffFreq, fileSampleRate);
+                displayFileInfo(decodedBuffer, fileMetadata);
+
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                drawFrequencyScale();
+
+            } catch (err) {
+                console.error('Error loading file:', err);
+                qualityBadge.textContent = 'Error: ' + (err.message || 'Load failed');
+            }
+        }
+
+        function onAudioPlay() {
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+            startVisualization();
+        }
+
+        function displayFileInfo(buffer, meta) {
+            const minutes = Math.floor(buffer.duration / 60);
+            const seconds = Math.floor(buffer.duration % 60);
+            document.getElementById('infoDuration').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+            // Show actual playback sample rate if different from file
+            const fileSR = buffer.sampleRate;
+            const actualSR = audioContext ? audioContext.sampleRate : fileSR;
+            let srText = `${(fileSR / 1000).toFixed(1)} kHz`;
+            if (actualSR !== fileSR) {
+                srText += ` (playback: ${(actualSR / 1000).toFixed(1)})`;
+            }
+            document.getElementById('infoSampleRate').textContent = srText;
+
+            document.getElementById('infoChannels').textContent = buffer.numberOfChannels === 2 ? 'Stereo' : buffer.numberOfChannels === 1 ? 'Mono' : buffer.numberOfChannels;
+            document.getElementById('infoSize').textContent = `${(meta.fileSize / 1024 / 1024).toFixed(1)} MB`;
+        }
+
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth * window.devicePixelRatio;
+            canvas.height = container.clientHeight * window.devicePixelRatio;
+            maxDataPoints = Math.floor(canvas.width / 4); // Wider slices = fatter peaks
+        }
+
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            if (audioContext && !animationId) {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                redrawSpectrogram();
+                drawFrequencyScale();
+            }
+        });
+
+        function analyzeBufferOffline(audioBuffer) {
+            const sampleRate = audioBuffer.sampleRate;
+            const nyquist = sampleRate / 2;
+            const channelData = audioBuffer.getChannelData(0);
+            const fftSize = 16384;
+            const numSegments = 20;
+            const totalSamples = channelData.length;
+            const cutoffs = [];
+
+            console.log(`=== Offline Analysis Debug ===`);
+            console.log(`Sample rate: ${sampleRate}, Nyquist: ${nyquist}`);
+
+            for (let seg = 0; seg < numSegments; seg++) {
+                const startRatio = 0.05 + (0.9 * seg / (numSegments - 1));
+                const startSample = Math.floor(totalSamples * startRatio) - Math.floor(fftSize / 2);
+                const clampedStart = Math.max(0, Math.min(startSample, totalSamples - fftSize));
+
+                const segment = new Float32Array(fftSize);
+                for (let i = 0; i < fftSize && (clampedStart + i) < totalSamples; i++) {
+                    segment[i] = channelData[clampedStart + i];
+                }
+
+                for (let i = 0; i < fftSize; i++) {
+                    segment[i] *= 0.5 * (1 - Math.cos(2 * Math.PI * i / fftSize));
+                }
+
+                const cutoff = computeSegmentCutoff(segment, sampleRate, fftSize, seg);
+                if (cutoff > 0) cutoffs.push(cutoff);
+            }
+
+            if (cutoffs.length === 0) return 14000;
+
+            cutoffs.sort((a, b) => a - b);
+            console.log(`All cutoffs (sorted): ${cutoffs.map(c => Math.round(c)).join(', ')}`);
+            const p90Index = Math.floor(cutoffs.length * 0.90);
+            const result = cutoffs[Math.min(p90Index, cutoffs.length - 1)];
+            console.log(`90th percentile (index ${p90Index}): ${Math.round(result)} Hz`);
+            return result;
+        }
+
+        function fft(real, imag) {
+            const n = real.length;
+            if (n <= 1) return;
+
+            for (let i = 0, j = 0; i < n; i++) {
+                if (i < j) {
+                    [real[i], real[j]] = [real[j], real[i]];
+                    [imag[i], imag[j]] = [imag[j], imag[i]];
+                }
+                let m = n >> 1;
+                while (m >= 1 && j >= m) { j -= m; m >>= 1; }
+                j += m;
+            }
+
+            for (let len = 2; len <= n; len <<= 1) {
+                const halfLen = len >> 1;
+                const angle = -2 * Math.PI / len;
+                const wReal = Math.cos(angle);
+                const wImag = Math.sin(angle);
+
+                for (let i = 0; i < n; i += len) {
+                    let curReal = 1, curImag = 0;
+                    for (let j = 0; j < halfLen; j++) {
+                        const uReal = real[i + j];
+                        const uImag = imag[i + j];
+                        const tReal = curReal * real[i + j + halfLen] - curImag * imag[i + j + halfLen];
+                        const tImag = curReal * imag[i + j + halfLen] + curImag * real[i + j + halfLen];
+                        real[i + j] = uReal + tReal;
+                        imag[i + j] = uImag + tImag;
+                        real[i + j + halfLen] = uReal - tReal;
+                        imag[i + j + halfLen] = uImag - tImag;
+                        const newReal = curReal * wReal - curImag * wImag;
+                        curImag = curReal * wImag + curImag * wReal;
+                        curReal = newReal;
+                    }
+                }
+            }
+        }
+
+        function computeSegmentCutoff(segment, sampleRate, fftSize, segIndex = -1) {
+            const nyquist = sampleRate / 2;
+            const binCount = fftSize / 2;
+            const binSize = nyquist / binCount;
+
+            const real = new Float32Array(segment);
+            const imag = new Float32Array(fftSize);
+            fft(real, imag);
+
+            const magnitudes = new Float32Array(binCount);
+            for (let i = 0; i < binCount; i++) {
+                magnitudes[i] = Math.sqrt(real[i] * real[i] + imag[i] * imag[i]);
+            }
+
+            const minBin = Math.floor(1000 / binSize);
+            const refStartBin = Math.floor(2000 / binSize);
+            const refEndBin = Math.floor(8000 / binSize);
+            let refSum = 0;
+            for (let i = refStartBin; i < refEndBin; i++) refSum += magnitudes[i];
+            const refAvg = refSum / (refEndBin - refStartBin);
+
+            if (refAvg < 0.001) return 0;
+
+            const windowBins = Math.floor(1000 / binSize);
+
+            function getWindowAvg(centerFreq) {
+                const centerBin = Math.floor(centerFreq / binSize);
+                const startBin = Math.max(minBin, centerBin - Math.floor(windowBins / 2));
+                const endBin = Math.min(binCount - 1, centerBin + Math.floor(windowBins / 2));
+                let sum = 0;
+                for (let i = startBin; i <= endBin; i++) sum += magnitudes[i];
+                return sum / (endBin - startBin + 1);
+            }
+
+            let cutoffFreq = 14000;
+            const debugRatios = [];
+
+            for (let freq = 20000; freq >= 14000; freq -= 500) {
+                if (freq > nyquist) continue;
+                const energy = getWindowAvg(freq);
+                const ratio = energy / refAvg;
+                // Lowered thresholds to detect sparser high-frequency content
+                const threshold = freq >= 19000 ? 0.015 : freq >= 17000 ? 0.025 : 0.04;
+                debugRatios.push({ freq, ratio: ratio.toFixed(4), threshold });
+
+                if (ratio >= threshold) {
+                    const energyAbove = freq < 19500 ? getWindowAvg(freq + 1500) : 0;
+                    const hasSharpDrop = energyAbove < energy * 0.5;
+                    cutoffFreq = hasSharpDrop && freq < 19500 ? freq : Math.min(freq + 1000, nyquist);
+                    break;
+                }
+            }
+
+            if (segIndex >= 0) {
+                console.log(`Segment ${segIndex}: cutoff=${cutoffFreq}, refAvg=${refAvg.toFixed(4)}`);
+                console.log(`  Ratios: ${debugRatios.map(r => `${r.freq/1000}k:${r.ratio}(t=${r.threshold})`).join(', ')}`);
+            }
+
+            return cutoffFreq;
+        }
+
+        function displayQualityResults(cutoffFreq, sampleRate) {
+            const meta = fileMetadata;
+            let quality, className, observedQuality;
+
+            if (cutoffFreq >= 20000) observedQuality = 'Full spectrum';
+            else if (cutoffFreq >= 19000) observedQuality = '~320 kbps';
+            else if (cutoffFreq >= 17500) observedQuality = '~256 kbps';
+            else if (cutoffFreq >= 16000) observedQuality = '~192 kbps';
+            else if (cutoffFreq >= 14500) observedQuality = '~128 kbps';
+            else observedQuality = '<128 kbps';
+
+            let formatStr = meta.format || 'Unknown';
+            if (meta.bitrate) formatStr += ` ${meta.bitrate} kbps`;
+            if (meta.isLosslessContainer) formatStr += ' (lossless)';
+
+            if (meta.isLosslessContainer) {
+                if (cutoffFreq >= 20000) {
+                    quality = 'Lossless ✓';
+                    className = 'quality-lossless';
+                } else {
+                    quality = 'Fake Lossless ✗';
+                    className = 'quality-low';
+                    observedQuality += ' — transcoded';
+                }
+            } else if (meta.format === 'OPUS' || meta.format === 'OGG') {
+                // Opus preserves full spectrum even at low bitrates, so use bitrate instead
+                const bitrate = Math.round((meta.fileSize * 8) / decodedBuffer.duration / 1000);
+
+                if (bitrate >= 192) { quality = 'Opus High'; className = 'quality-high'; }
+                else if (bitrate >= 128) { quality = 'Opus Good'; className = 'quality-high'; }
+                else if (bitrate >= 96) { quality = 'Opus Medium'; className = 'quality-medium'; }
+                else { quality = 'Opus Low'; className = 'quality-low'; }
+
+                observedQuality = `${bitrate} kbps`;
+                formatStr += ' — bitrate-based (spectral analysis not applicable)';
+            } else if (meta.format === 'MP3') {
+                if (cutoffFreq >= 20000) { quality = '320 kbps / V0'; className = 'quality-high'; }
+                else if (cutoffFreq >= 19000) { quality = '320 kbps'; className = 'quality-high'; }
+                else if (cutoffFreq >= 17500) { quality = '256 kbps'; className = 'quality-high'; }
+                else if (cutoffFreq >= 16000) { quality = '192 kbps'; className = 'quality-medium'; }
+                else if (cutoffFreq >= 14500) { quality = '128 kbps'; className = 'quality-low'; }
+                else { quality = 'Low Quality'; className = 'quality-low'; }
+
+                if (meta.bitrate) {
+                    const expected = { 320: 20000, 256: 17500, 192: 16000, 128: 14500 };
+                    if (cutoffFreq < (expected[meta.bitrate] || 14000) - 1000) {
+                        observedQuality += ' — lower than claimed';
+                    }
+                }
+            } else {
+                if (cutoffFreq >= 20000) { quality = 'High Quality'; className = 'quality-high'; }
+                else if (cutoffFreq >= 17500) { quality = 'Good Quality'; className = 'quality-high'; }
+                else if (cutoffFreq >= 16000) { quality = 'Medium'; className = 'quality-medium'; }
+                else { quality = 'Low Quality'; className = 'quality-low'; }
+            }
+
+            qualityBadge.textContent = quality;
+            qualityBadge.className = `quality-badge ${className}`;
+
+            document.getElementById('infoFormat').textContent = formatStr;
+            document.getElementById('infoObserved').textContent = observedQuality;
+
+            if (meta.format === 'OPUS' || meta.format === 'OGG') {
+                document.getElementById('infoCutoff').textContent = 'N/A (see note)';
+            } else {
+                document.getElementById('infoCutoff').textContent = `~${Math.round(cutoffFreq / 1000)} kHz`;
+            }
+        }
+
+        function redrawSpectrogram() {
+            if (spectrogramData.length === 0) return;
+
+            const sliceWidth = canvas.width / maxDataPoints;
+            const peakEnvelope = [];
+
+            for (let i = 0; i < spectrogramData.length; i++) {
+                const x = i * sliceWidth;
+                const slice = spectrogramData[i];
+                let peakBin = 0;
+
+                for (let j = 0; j < slice.length; j++) {
+                    const value = slice[j];
+                    const y = canvas.height - (j * canvas.height / slice.length);
+                    const height = canvas.height / slice.length + 1;
+
+                    // Apply gamma correction to make quiet signals visible
+                    const normalized = value / 255;
+                    const gamma = Math.pow(normalized, 0.45);
+                    const freqRatio = j / slice.length;
+                    const boost = 1 + (1 - freqRatio) * 0.3;
+                    const brightness = Math.min(255, Math.floor(gamma * 255 * boost));
+                    ctx.fillStyle = `rgb(${brightness},${brightness},${brightness})`;
+                    ctx.fillRect(x, y, sliceWidth + 1, height);
+
+                    if (value > 3) peakBin = j;
+                }
+
+                peakEnvelope.push(peakBin);
+            }
+
+            // Smooth the peak envelope slightly (3-point moving average)
+            const smoothedEnvelope = [];
+            for (let i = 0; i < peakEnvelope.length; i++) {
+                const prev = peakEnvelope[Math.max(0, i - 1)];
+                const curr = peakEnvelope[i];
+                const next = peakEnvelope[Math.min(peakEnvelope.length - 1, i + 1)];
+                smoothedEnvelope.push((prev + curr + next) / 3);
+            }
+
+            // Draw peak envelope line
+            if (showPeakEnvelope && smoothedEnvelope.length > 1 && spectrogramData[0]) {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([2, 3]);
+                ctx.beginPath();
+
+                for (let i = 0; i < smoothedEnvelope.length; i++) {
+                    const x = i * sliceWidth + sliceWidth / 2;
+                    const y = canvas.height - (smoothedEnvelope[i] * canvas.height / spectrogramData[0].length);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+        function startVisualization() {
+            if (!analyser) return;
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            const sampleRate = audioContext.sampleRate;
+            const nyquist = sampleRate / 2;
+
+            function draw() {
+                animationId = requestAnimationFrame(draw);
+                analyser.getByteFrequencyData(dataArray);
+
+                spectrogramData.push(new Uint8Array(dataArray));
+                if (spectrogramData.length > maxDataPoints) spectrogramData.shift();
+
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const sliceWidth = canvas.width / maxDataPoints;
+
+                const peakEnvelope = [];
+
+                for (let i = 0; i < spectrogramData.length; i++) {
+                    const x = i * sliceWidth;
+                    const slice = spectrogramData[i];
+                    let peakBin = 0;
+
+                    for (let j = 0; j < slice.length; j++) {
+                        const value = slice[j];
+                        const y = canvas.height - (j * canvas.height / slice.length);
+                        const height = canvas.height / slice.length + 1;
+
+                        // Apply gamma correction to make quiet signals visible
+                        const normalized = value / 255;
+                        const gamma = Math.pow(normalized, 0.45); // Stronger lift for quiet signals
+                        const freqRatio = j / slice.length;
+                        const boost = 1 + (1 - freqRatio) * 0.3; // Minimal frequency bias
+                        const brightness = Math.min(255, Math.floor(gamma * 255 * boost));
+                        ctx.fillStyle = `rgb(${brightness},${brightness},${brightness})`;
+                        ctx.fillRect(x, y, sliceWidth + 1, height);
+
+                        // Track highest bin with any energy
+                        if (value > 3) peakBin = j;
+                    }
+
+                    peakEnvelope.push(peakBin);
+                }
+
+                // Smooth the peak envelope slightly (3-point moving average)
+                const smoothedEnvelope = [];
+                for (let i = 0; i < peakEnvelope.length; i++) {
+                    const prev = peakEnvelope[Math.max(0, i - 1)];
+                    const curr = peakEnvelope[i];
+                    const next = peakEnvelope[Math.min(peakEnvelope.length - 1, i + 1)];
+                    smoothedEnvelope.push((prev + curr + next) / 3);
+                }
+
+                // Draw peak envelope line
+                if (showPeakEnvelope && smoothedEnvelope.length > 1) {
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([2, 3]);
+                    ctx.beginPath();
+
+                    for (let i = 0; i < smoothedEnvelope.length; i++) {
+                        const x = i * sliceWidth + sliceWidth / 2;
+                        const y = canvas.height - (smoothedEnvelope[i] * canvas.height / spectrogramData[0].length);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
+                drawFrequencyScale();
+            }
+
+            draw();
+        }
+
+        function drawFrequencyScale() {
+            if (!audioContext) return;
+
+            const sampleRate = audioContext.sampleRate;
+            const nyquist = sampleRate / 2;
+            const dpr = window.devicePixelRatio;
+
+            ctx.setLineDash([4, 4]);
+            ctx.lineWidth = 1;
+
+            // Regular frequency markers - include full range up to nyquist
+            let freqMarkers;
+            if (nyquist >= 80000) {
+                freqMarkers = [5000, 10000, 20000, 40000, 60000, 80000];
+            } else if (nyquist >= 40000) {
+                freqMarkers = [5000, 10000, 15000, 20000, 30000, 40000];
+            } else if (nyquist >= 22000) {
+                freqMarkers = [5000, 10000, 15000, 20000, 21000, 22000];
+            } else if (nyquist >= 20000) {
+                freqMarkers = [5000, 10000, 15000, 20000];
+            } else {
+                freqMarkers = [5000, 10000, 15000, Math.floor(nyquist / 1000) * 1000];
+            }
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            freqMarkers.forEach(freq => {
+                if (freq <= nyquist) {
+                    const y = canvas.height - (freq / nyquist * canvas.height);
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(canvas.width, y);
+                    ctx.stroke();
+
+                    ctx.setLineDash([]);
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                    ctx.font = `${11 * dpr}px monospace`;
+                    ctx.textAlign = 'left';
+                    ctx.fillText(`${freq/1000}k`, 5 * dpr, y - 3 * dpr);
+                    ctx.setLineDash([4, 4]);
+                }
+            });
+
+            // Quality cutoff markers
+            if (showQualityCutoffs && nyquist >= 20000) {
+                const qualityCutoffs = [
+                    { freq: 20000, label: '320/V0', color: 'rgba(255,255,255,0.6)' },
+                    { freq: 18000, label: '256', color: 'rgba(200,200,200,0.5)' },
+                    { freq: 16000, label: '192', color: 'rgba(150,150,150,0.5)' },
+                    { freq: 15000, label: '128', color: 'rgba(100,100,100,0.5)' },
+                ];
+
+                ctx.setLineDash([]);
+                qualityCutoffs.forEach(({ freq, label, color }) => {
+                    if (freq <= nyquist) {
+                        const y = canvas.height - (freq / nyquist * canvas.height);
+                        ctx.strokeStyle = color;
+                        ctx.beginPath();
+                        ctx.moveTo(0, y);
+                        ctx.lineTo(canvas.width, y);
+                        ctx.stroke();
+
+                        ctx.fillStyle = color;
+                        ctx.font = `bold ${10 * dpr}px monospace`;
+                        ctx.textAlign = 'right';
+                        ctx.fillText(label, canvas.width - 5 * dpr, y - 3 * dpr);
+                    }
+                });
+            }
+
+            ctx.setLineDash([]);
+        }
+
+        function stopVisualization() {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+        }
+    </script>
+</body>
+</html>
